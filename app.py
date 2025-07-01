@@ -8,7 +8,7 @@ import pandas as pd
 import google.generativeai as genai
 
 # 1) Configure your Gemini API key via Streamlit secrets
-API_KEY = st.secrets["AIzaSyDbrfR6xWo6wAMh4CZMj0lbUwBQJvJrfIk"]
+api_key = st.secrets["gemini_api"]
 genai.configure(api_key=API_KEY)
 
 # 2) Define the shared system prompt for SQL generation
