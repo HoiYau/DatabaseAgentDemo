@@ -3,15 +3,16 @@
 import os
 import re
 import sqlite3
+
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# 1) Configure your Gemini API key via Streamlit secrets
+# 1) Pull the key from Streamlit secrets and configure GenAI
 api_key = st.secrets["gemini_api"]
-genai.configure(api_key=API_KEY)
+genai.configure(api_key=api_key)
 
-# 2) Define the shared system prompt for SQL generation
+# 2) Define our system prompt
 SQL_SYSTEM_PROMPT = """
 You are an expert SQL assistant for a property management system. Here is the database schema:
 
@@ -29,20 +30,20 @@ Always generate valid SQLite SQL using the correct table and column names.
 Respond only with the raw SQL—do NOT include markdown fences or annotations.
 """
 
-# 3) Instantiate the Gemini model for chat-based SQL generation
+# 3) Create our chat‑based SQL generator
 sql_model = genai.GenerativeModel(
     "gemini-2.5-flash",
     system_instruction=SQL_SYSTEM_PROMPT
 )
 
 def nl_to_sql(question: str) -> str:
-    """Convert natural-language question to raw SQL."""
+    """Convert a natural‑language question into raw SQL."""
     chat = sql_model.start_chat()
     resp = chat.send_message(question)
     return resp.text
 
 def clean_sql(raw: str) -> str:
-    """Strip backticks/fences from the SQL."""
+    """Strip out any ``` fences."""
     sql = re.sub(r"```[^\n]*\n", "", raw)
     sql = re.sub(r"\n```", "", sql)
     return sql.strip()
@@ -50,43 +51,46 @@ def clean_sql(raw: str) -> str:
 # 4) Streamlit UI
 st.title("🏠 Property Management SQL Chatbot")
 
-st.markdown("""
-Upload your `database.db` file (SQLite) here, or keep the default in the working directory.
-Then ask any question about tenants, leases, properties, payments, or tickets.
-""")
+st.markdown(
+    "Upload your `database.db` (SQLite) or use the default. "
+    "Then ask any question about tenants, leases, properties, payments, or tickets."
+)
 
-db_file = st.sidebar.file_uploader("Upload SQLite DB file", type="db")
+# Database uploader
+db_file = st.sidebar.file_uploader("Upload SQLite DB", type=["db","sqlite"])
 if db_file:
     db_path = "/tmp/uploaded.db"
     with open(db_path, "wb") as f:
         f.write(db_file.getbuffer())
 else:
-    db_path = "database.db"  # default path in repo
+    db_path = "database.db"  # must exist in repo
 
 question = st.text_input("Ask a question about your property data:")
 
 if st.button("Run Query") and question:
+    # 1) Generate SQL
     with st.spinner("Generating SQL…"):
         raw_sql = nl_to_sql(question)
         sql = clean_sql(raw_sql)
+
     st.subheader("Generated SQL")
     st.code(sql, language="sql")
 
-    # Execute the SQL
+    # 2) Execute it
     try:
         conn = sqlite3.connect(db_path)
         df = pd.read_sql_query(sql, conn)
         conn.close()
 
         if df.empty:
-            st.warning("The query returned no results.")
+            st.warning("No results returned.")
         else:
-            st.subheader("Query Results")
+            st.subheader("Results")
             st.dataframe(df)
 
-            # 5) Generate a natural‑language answer from the results
-            answer_prompt = f"""
-Here are the results of the SQL query you asked for:
+            # 3) Summarize in English
+            summary_prompt = f"""
+Here are the results of your query:
 
 SQL:
 {sql}
@@ -94,12 +98,13 @@ SQL:
 Results:
 {df.to_dict(orient='records')}
 
-Please summarize these results in plain English for the user.
+Please summarize these results in plain English.
 """
-            with st.spinner("Generating answer…"):
+            with st.spinner("Generating summary…"):
                 ans_chat = sql_model.start_chat()
-                ans_resp = ans_chat.send_message(answer_prompt)
-            st.subheader("Answer")
+                ans_resp = ans_chat.send_message(summary_prompt)
+
+            st.subheader("Summary")
             st.write(ans_resp.text)
 
     except Exception as e:
