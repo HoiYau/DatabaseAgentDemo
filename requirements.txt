@@ -1,2 +1,3 @@
-pandas==2.2.2
-google-genai==0.8.0
+streamlit
+pandas
+google-generativeai
