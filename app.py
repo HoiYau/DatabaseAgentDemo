@@ -6,7 +6,7 @@ import sqlite3
 
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+from google import genai
 
 # 1) Pull the key from Streamlit secrets and configure GenAI
 api_key = st.secrets["gemini_api"]
